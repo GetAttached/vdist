@@ -11,7 +11,7 @@ import vdist.defaults as defaults
 class BuildMachine(object):
 
     def __init__(self, machine_logs=True, image=None, insecure_registry=False,
-                 docker_cli='docker'):
+                 docker_cli='docker', copy_files=True):
         self.logger = logging.getLogger('BuildMachine')
 
         self.machine_logs = machine_logs
@@ -22,6 +22,7 @@ class BuildMachine(object):
         self.docker_cli = docker_cli
 
         self.insecure_registry = insecure_registry
+        self.copy_files = copy_files
 
     def _run_cli(self, cmd):
         self.logger.info('Running command: "%s"' % cmd)
@@ -42,6 +43,10 @@ class BuildMachine(object):
 
         return first_line
 
+    def _copy_files(self, binds):
+        for k, v in binds.items():
+            self._run_cli('{} cp {}/. {}:{}/'.format(self.docker_cli, k, self.container_id, v))
+
     def _read_from_media(self, media):
         first_line = None
         for input_to_read in media:
@@ -51,6 +56,11 @@ class BuildMachine(object):
                     first_line = line
                 self.logger.info(line)
         return first_line
+
+    @staticmethod
+    def _create_volumes(binds):
+        vol_list = ['-v %s' % v for k, v in binds.items()]
+        return ' '.join(vol_list)
 
     @staticmethod
     def _binds_to_shell_volumes(binds):
@@ -70,11 +80,23 @@ class BuildMachine(object):
             defaults.SCRATCH_BUILDSCRIPT_NAME
         )
         self.logger.info('Starting container: %s' % self.image)
-        self.container_id = self._run_cli(
-            '%s run -d -ti %s %s bash' %
-            (self.docker_cli,
-             self._binds_to_shell_volumes(binds),
-             self.image))
+        if self.copy_files:
+            self.container_id = self._run_cli(
+                '%s run -d -ti %s %s bash' %
+                (self.docker_cli,
+                 self._create_volumes(binds),
+                 self.image))
+            self._copy_files(binds)
+            self._run_cli(
+                '%s exec %s %s' %
+                (self.docker_cli, self.container_id, '/bin/ls /work'))
+
+        else:
+            self.container_id = self._run_cli(
+                '%s run -d -ti %s %s bash' %
+                (self.docker_cli,
+                 self._binds_to_shell_volumes(binds),
+                 self.image))
 
         self._run_cli(
             '%s exec %s %s' %

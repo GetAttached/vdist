@@ -138,7 +138,8 @@ class Build(object):
                  after_remove=None,
                  before_remove=None,
                  after_upgrade=None,
-                 before_upgrade=None):
+                 before_upgrade=None,
+                 copy_files=None):
         self.app = app
         self.version = version.format(**os.environ)
         self.source = source
